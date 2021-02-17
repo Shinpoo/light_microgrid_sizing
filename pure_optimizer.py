@@ -629,7 +629,6 @@ class PureOptimizer:
         Genset_cap = []
         results = []
         total_battery_reinvestment = 0.0
-        self.model.reinv_storages_capacity.display()
         for device_name in self.entity.devices_names:
             for g in self.entity.non_steerable_generators:
                 if g.name == device_name:
@@ -649,8 +648,6 @@ class PureOptimizer:
                     results.append(self.model.storages_capacity[s].value)
                     if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
                         for n in range(self.sizing_config.investment_horizon):
-                            print(total_battery_reinvestment)
-                            print(self.model.reinv_storages_capacity[s, n].value)
                             total_battery_reinvestment += self.model.reinv_storages_capacity[s, n].value
             for h in self.entity.h2_storages:
                 if h.name == device_name:
