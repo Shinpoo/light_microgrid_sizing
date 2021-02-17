@@ -611,7 +611,7 @@ class PureOptimizer:
 
         self.model.obj = Objective(rule=obj_expression, sense=maximize)
 
-    def _optimize_function(self, lower_bounds, upper_bounds, maximum_iterations):
+    def optimize_function(self):
         t0_solve = time.time()
         solver = SolverFactory(self.solver_name)
         self.results = solver.solve(self.model)

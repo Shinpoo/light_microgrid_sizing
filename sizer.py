@@ -28,7 +28,7 @@ class Sizer:
         self.optimizer = PureOptimizer(self.microgrid, selected_days, extracted_series,
                                                                  extracted_weights,  self.sizing_config,
                                                                  initial_state=self.initial_state)
-        self.optimal_grid = self.optimizer._optimize_function([], [], 0)  
+        self.optimal_grid = self.optimizer.optimize_function()  
         self.op_sizing = self.optimizer.optimal_sizing
 
     def _get_progressions(self):

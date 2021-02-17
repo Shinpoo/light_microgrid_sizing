@@ -14,7 +14,7 @@
     "grid_connection_cost": false,
     "multi_stage_sizing": true,
     "sensitivity_analysis": true,
-    "save_days": "",
+    "save_days": "test.pck",
     "full_sizing": true
   },
    "connection_types": [

@@ -2,10 +2,8 @@ import pandas as pd
 import json
 import os
 from sizer import Sizer
-import shutil
 from representative_days import RepresentativeDays, create_rd_output_path
 from sizing_configuration import SizingConfiguration
-#Select representative days
 
 #Get the data
 pv_production = pd.read_csv("data/pv_production_location.csv", sep=";", parse_dates=True, index_col='DateTime')
@@ -39,7 +37,7 @@ for l in range(len(l_p)):
                 "off_grid": {"peak_load": peak[l], "PV": 0.0, "INV": 0.0, "BAT": 0.0, "RBAT": 0.0, "GEN": 0.0, "NPV": 0.0}}})
 
 
-for l in range(1):#len(l_p)
+for l in range(1):#to replace by len(l_p)
     time_series["Load"] = load_data[case_name]
     microgrid["non_flexible_loads"][0]["capacity"] = peak[l]
 
@@ -74,7 +72,7 @@ for l in range(1):#len(l_p)
     time_series["purchase_price"] = [purchase_price] * len(time_series)
 
     
-    for i in range(1):#len(locations)
+    for i in range(1):#to replace by len(locations)
         sizing_db[l_p[l]][i]["purchase_price"] = purchase_price
         time_series["PV"] = pv_production[locations[str(i)]["location"]]
         rd_output_path = create_rd_output_path("results/" + case_name)
@@ -82,7 +80,6 @@ for l in range(1):#len(l_p)
         sizer = Sizer(microgrid, time_series, config, initial_state)
         sizer.size(selected_days, extracted_series, extracted_weights)
 
-        #selected_days, extracted_series, extracted_weights = sizer.get_representative_days(time_series, config, output_path)
 
         # sizing_db[l_p[l]][i]["sizing_results"]['off_grid']["PV"] = sizer.op_sizing["PV"]
         # sizing_db[l_p[l]][i]["sizing_results"]['off_grid']["BAT"] = sizer.op_sizing["BAT"]
