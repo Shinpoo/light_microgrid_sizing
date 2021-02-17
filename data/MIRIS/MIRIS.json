@@ -1,0 +1,98 @@
+{
+  "parameters": {
+    "case_name": "MIRIS",
+    "initial_investment": 0.0,
+    "investment_horizon": 20,
+    "controller": "RuleBased",
+    "control_horizon": 1,
+    "simulation_step": 60.0,
+    "maximum_iterations": 441,
+    "discount_rate": 0.02,
+    "num_representative_days": 10,
+    "representative_days_time_limit": 10,
+    "grid_tied": true,
+    "grid_connection_cost": true,
+    "sensitivity_nrd": true
+  },
+   "connection_types": [
+    {
+      "type": "TMT",
+      "upper_limit": 10000,
+      "proportional_connection_cost": 8.19,
+      "fix_connection_cost": 20735,
+      "annual_fee": 1588,
+      "annual_injection_fee_per_kva": 0.3137836,
+      "k_eco": 0,
+      "green_certificate": 0
+    },
+    {
+      "type": "MT",
+      "upper_limit": 5000,
+      "proportional_connection_cost": 66.09,
+      "fix_connection_cost": 11910,
+      "annual_fee": 1295,
+      "annual_injection_fee_per_kva": 0.0942671,
+      "k_eco": 0,
+      "green_certificate": 0
+    },
+    {
+      "type": "TBT",
+      "upper_limit": 250,
+      "proportional_connection_cost": 102.75,
+      "fix_connection_cost": 4920,
+      "annual_fee": 452.14,
+      "annual_injection_fee_per_kva": 2.5757465,
+      "k_eco": 0,
+      "green_certificate": 0
+    },
+    {
+      "type": "BT",
+      "upper_limit": 100,
+      "proportional_connection_cost": 204,
+      "fix_connection_cost": 1000,
+      "annual_fee": 34.65,
+      "annual_injection_fee_per_kva": 2.5757465,
+      "k_eco": 0,
+      "green_certificate": 0
+    }
+  ],
+  "storages": [
+    {
+      "name": "Battery",
+      "type": "BasicStorage",
+      "capacity": 1340,
+      "max_charge_rate": 1,
+      "max_discharge_rate": 1,
+      "charge_efficiency": 0.95,
+      "discharge_efficiency": 0.95,
+      "capex":350,
+      "opex":3.5,
+      "to_size":true,
+      "lower_bound": 400,
+      "upper_bound": 1400
+    }
+  ],
+  "flexible_loads": [],
+  "non_flexible_loads": [
+    {
+      "capacity": 938.0,
+      "name": "Conso",
+      "connection_type": "MT"
+    }
+  ],
+  "non_steerable_generators": [
+    {
+      "name": "PV",
+      "capacity": 1,
+      "capex": 750,
+      "opex": 7.5,
+      "curtailment_price": 0,
+      "to_size": true,
+      "lower_bound": 500,
+      "upper_bound": 1500
+    }
+  ],
+  "sheddable_loads": [],
+  "steerable_generators": [
+  ]
+}
