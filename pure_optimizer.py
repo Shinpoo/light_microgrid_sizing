@@ -16,10 +16,6 @@ class PureOptimizer:
 
     def __init__(self, microgrid, selected_days, extracted_series, extracted_weights, config, initial_state):
         self.microgrid = microgrid
-        self.evaluations_points = []
-        self.evaluations_objective = []
-        # self._sized_device_lower_bounds = []
-        # self._sized_device_upper_bounds = []
         self.selected_days = selected_days
         self.extracted_series = extracted_series
         self.extracted_weights = extracted_weights
@@ -619,7 +615,7 @@ class PureOptimizer:
                          io_options={"symbolic_solver_labels": True})
         self.solving_duration = time.time() - t0_solve
         print("Solving time: %.2fs" % self.solving_duration)
-        print(self.results)
+
         obj = self.model.obj.value()
         PV_cap = []
         Inv_cap = []
@@ -658,8 +654,6 @@ class PureOptimizer:
                     H2_tank_cap.append(self.model.h2_tanks_capacity[t].value)
                     results.append(self.model.h2_tanks_capacity[t].value)
 
-        self.evaluations_points.append(results)
-        self.evaluations_objective.append(-obj)
 
         # self.model.delta.display()
         # self.model.prop_connection_cost.display()

@@ -4,3 +4,4 @@
 *.pck
 .vscode/
 results/
+.idea/

@@ -13,7 +13,7 @@ class Sizer:
         self.initial_state = initial_state
 
     def size(self, selected_days, extracted_series, extracted_weights):
-        if self.sizing_config.full_sizing:
+        if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
             # Extend and apply progression
             selected_days, extracted_series, extracted_weights = self._extend_over_planning_horizon(selected_days,
                                                                                                     extracted_series,
@@ -21,10 +21,9 @@ class Sizer:
         else:
             # Run only on one year, apply progression to put ourself in a average situation for sizing.
             progressions = self._get_progressions()
-            print(extracted_series)
             for device_name, progression in progressions.items():
                 extracted_series[0][device_name] *= (1 + progression) ** (self.sizing_config.investment_horizon/2)
-        random.seed(42)
+        #random.seed(42)
         self.optimizer = PureOptimizer(self.microgrid, selected_days, extracted_series,
                                                                  extracted_weights,  self.sizing_config,
                                                                  initial_state=self.initial_state)

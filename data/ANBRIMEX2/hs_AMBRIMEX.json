@@ -1,24 +1,20 @@
 {
   "parameters": {
-    "case_name": "HS-Anbrimex",
+    "case_name": "ANBRIMEX",
     "initial_investment": 0.0,
     "investment_horizon": 20,
     "controller": "RuleBased",
     "optimizer_method": "optimization",
-    "control_horizon": 24,
     "simulation_step": 60.0,
-    "maximum_iterations": 351,
     "discount_rate": 0.02,
     "num_representative_days": 20,
     "representative_days_time_limit": 20,
     "representative_days_solver": "gurobi",
-    "only_size": true,
     "grid_tied": true,
     "grid_connection_cost": false,
     "full_sizing": false,
-    "multi_stage_sizing": false,
-    "sensitivity_analysis": false,
-    "save_days": "test.pck"
+    "multi_stage_sizing": true,
+    "sensitivity_analysis": true
   },
    "connection_types": [
     {
@@ -80,28 +76,11 @@
   ],
 
   "h2_storages": [
-    {
-      "name": "H2_Storage",
-      "capacity": 1,
-      "max_charge_rate": 0.5,
-      "max_discharge_rate": 0.5,
-      "charge_efficiency": 0.65,
-      "discharge_efficiency": 0.65,
-      "capex":1000,
-      "opex":10,
-      "to_size":true
-    }
+    
   ],
 
   "h2_tanks": [
-    {
-      "name": "H2 Tank",
-      "capacity": 1,
-      "capex":10,
-      "opex":1,
-      "calorific_value_per_l": 1.4,
-      "to_size":true
-    }
+
   ],
 
   "flexible_loads": [],
@@ -109,8 +88,7 @@
     {
       "capacity": 49.0,
       "name": "Conso",
-      "connection_type": "BT",
-      "owner": "1"
+      "connection_type": "BT"
     }
   ],
   "inverters": [
@@ -128,22 +106,12 @@
       "capacity": 1,
       "capex": 500,
       "opex": 5,
-      "owner": "1",
       "progression": -0.01,
       "to_size": true
     }
   ],
   "sheddable_loads": [],
   "steerable_generators": [
-    {
-      "name": "genset",
-      "type": "SimpleGenset",
-      "capacity": 1,
-      "fuel_price": 1,
-      "fuel_efficiency": 3,
-      "capex": 1000,
-      "opex": 10,
-      "to_size": true
-    }
+
   ]
 }

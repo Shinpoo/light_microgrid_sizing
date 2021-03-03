@@ -2,20 +2,20 @@
   "parameters": {
     "case_name": "ANBRIMEX",
     "initial_investment": 0.0,
-    "investment_horizon": 25,
+    "investment_horizon": 20,
+    "controller": "RuleBased",
     "optimizer_method": "optimization",
     "simulation_step": 60.0,
     "discount_rate": 0.02,
     "num_representative_days": 20,
     "representative_days_time_limit": 20,
     "representative_days_solver": "gurobi",
-    "only_size": true,
     "grid_tied": false,
     "grid_connection_cost": false,
+    "full_sizing": false,
     "multi_stage_sizing": true,
     "sensitivity_analysis": true,
-    "save_days": "test.pck",
-    "full_sizing": true
+    "save_days": ""
   },
    "connection_types": [
     {
@@ -25,7 +25,7 @@
       "fix_connection_cost": 20735,
       "annual_fee": 1588,
       "annual_injection_fee_per_kva": 0.3137836,
-      "k_eco": 0,
+      "k_eco": 0.47,
       "green_certificate": 0
     },
     {
@@ -35,7 +35,7 @@
       "fix_connection_cost": 11910,
       "annual_fee": 1295,
       "annual_injection_fee_per_kva": 0.0942671,
-      "k_eco": 0,
+      "k_eco": 0.63,
       "green_certificate": 0
     },
     {
@@ -45,7 +45,7 @@
       "fix_connection_cost": 4920,
       "annual_fee": 452.14,
       "annual_injection_fee_per_kva": 2.5757465,
-      "k_eco": 0,
+      "k_eco": 0.79,
       "green_certificate": 0
     },
     {
@@ -55,7 +55,7 @@
       "fix_connection_cost": 1000,
       "annual_fee": 34.65,
       "annual_injection_fee_per_kva": 2.5757465,
-      "k_eco": 0,
+      "k_eco": 0.79,
       "green_certificate": 0
     }
   ],
@@ -75,15 +75,19 @@
       "to_size":true
     }
   ],
+
   "h2_storages": [
+
   ],
 
   "h2_tanks": [
+
   ],
+
   "flexible_loads": [],
   "non_flexible_loads": [
     {
-      "capacity": 25.0,
+      "capacity": 49.0,
       "name": "Load",
       "connection_type": "BT"
     }

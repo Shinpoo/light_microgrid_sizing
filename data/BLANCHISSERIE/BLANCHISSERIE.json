@@ -4,15 +4,18 @@
     "initial_investment": 0.0,
     "investment_horizon": 20,
     "controller": "RuleBased",
-    "control_horizon": 1,
+    "optimizer_method": "optimization",
     "simulation_step": 60.0,
-    "maximum_iterations": 441,
     "discount_rate": 0.02,
-    "num_representative_days": 10,
-    "representative_days_time_limit": 15,
-    "grid_tied": true,
-    "grid_connection_cost": true,
-    "sensitivity_nrd": true
+    "num_representative_days": 20,
+    "representative_days_time_limit": 20,
+    "representative_days_solver": "gurobi",
+    "grid_tied": false,
+    "grid_connection_cost": false,
+    "full_sizing": false,
+    "multi_stage_sizing": true,
+    "sensitivity_analysis": true,
+    "save_days": ""
   },
    "connection_types": [
     {
@@ -22,7 +25,7 @@
       "fix_connection_cost": 20735,
       "annual_fee": 1588,
       "annual_injection_fee_per_kva": 0.3137836,
-      "k_eco": 0,
+      "k_eco": 0.47,
       "green_certificate": 0
     },
     {
@@ -32,7 +35,7 @@
       "fix_connection_cost": 11910,
       "annual_fee": 1295,
       "annual_injection_fee_per_kva": 0.0942671,
-      "k_eco": 0,
+      "k_eco": 0.63,
       "green_certificate": 0
     },
     {
@@ -42,7 +45,7 @@
       "fix_connection_cost": 4920,
       "annual_fee": 452.14,
       "annual_injection_fee_per_kva": 2.5757465,
-      "k_eco": 0,
+      "k_eco": 0.79,
       "green_certificate": 0
     },
     {
@@ -52,47 +55,73 @@
       "fix_connection_cost": 1000,
       "annual_fee": 34.65,
       "annual_injection_fee_per_kva": 2.5757465,
-      "k_eco": 0,
+      "k_eco": 0.79,
       "green_certificate": 0
     }
   ],
   "storages": [
-     {
+    {
       "name": "Battery",
       "type": "BasicStorage",
-      "capacity": 1340,
+      "capacity": 1,
       "max_charge_rate": 1,
       "max_discharge_rate": 1,
       "charge_efficiency": 0.95,
       "discharge_efficiency": 0.95,
+      "max_number_cycle": 3500,
+      "residual_capacity": 0.6,
       "capex":350,
       "opex":3.5,
-      "to_size":true,
-      "lower_bound": 0,
-      "upper_bound": 1000
+      "to_size":true
     }
   ],
+
+  "h2_storages": [
+
+  ],
+
+  "h2_tanks": [
+
+  ],
+
   "flexible_loads": [],
   "non_flexible_loads": [
     {
-      "capacity": 1084.0,
-      "name": "Conso",
-      "connection_type": "MT"
+      "capacity": 49.0,
+      "name": "Load",
+      "connection_type": "BT"
+    }
+  ],
+  "inverters": [
+    {
+      "name": "Inverter",
+      "capacity": 1,
+      "capex": 200,
+      "opex": 2,
+      "to_size": true
     }
   ],
   "non_steerable_generators": [
     {
       "name": "PV",
       "capacity": 1,
-      "capex": 750,
-      "opex": 7.5,
-      "curtailment_price": 0,
-      "to_size": true,
-      "lower_bound": 800,
-      "upper_bound": 1800
+      "capex": 500,
+      "opex": 5,
+      "progression": -0.01,
+      "to_size": true
     }
   ],
   "sheddable_loads": [],
   "steerable_generators": [
+    {
+      "name": "genset",
+      "type": "SimpleGenset",
+      "capacity": 1,
+      "fuel_price": 1,
+      "fuel_efficiency": 3,
+      "capex": 1000,
+      "opex": 10,
+      "to_size": true
+    }
   ]
 }
