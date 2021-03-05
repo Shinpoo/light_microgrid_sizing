@@ -104,7 +104,7 @@ class PureOptimizer:
         self.model.steerable_generators = Set(dimen=1, initialize=indices)
 
     def _create_parameters(self):
-        delta_t_in_hours = 1  # imposed
+        delta_t_in_hours = 1  # imposed #TODO made this more general (we want to use 15min)
         self.delta_t = delta_t_in_hours
 
         weights_list = []
@@ -145,6 +145,7 @@ class PureOptimizer:
         # aggregate all consumption into one list, must be considered separately when considering several entities
         self.total_consumption = [0.0] * self.number_periods
         for s in self.entity.non_flexible_loads:
+            peak_cost_kW = s.peak_cost_kW
             for p in range(self.number_periods):
                 self.total_consumption[p] += self.working_series[s.name][p] * s.capacity
 
@@ -156,6 +157,7 @@ class PureOptimizer:
 
         self.purchase_price = list(self.working_series['purchase_price'])
         self.sale_price = list(self.working_series['sale_price'])
+        self.peak_cost_kW = peak_cost_kW
 
     def _create_variables(self):
         # cost variables
@@ -167,13 +169,19 @@ class PureOptimizer:
             self.model.reinv_storages_capacity = Var(self.model.storages, self.model.investment_horizon,
                                                      within=NonNegativeReals)
             self.model.z_product = Var(self.model.storages, self.model.investment_horizon, within=NonNegativeReals)
+            self.model.peak = Var(self.model.investment_horizon, within=NonNegativeReals)
+            self.model.peak_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
         elif self.sizing_config.multi_stage_sizing:
             self.model.net_operation_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
             self.model.reinvestment_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
             self.model.reinv_storages_capacity = Var(self.model.storages, self.model.investment_horizon,
                                                      within=NonNegativeReals)
+            self.model.peak = Var(self.model.investment_horizon, within=NonNegativeReals)
+            self.model.peak_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
         else:
             self.model.net_operation_cost = Var(within=NonNegativeReals)
+            self.model.peak = Var(within=NonNegativeReals)
+            self.model.peak_cost = Var(within=NonNegativeReals)
 
         # operation variables
         self.model.charge = Var(self.model.storages, self.model.periods, within=NonNegativeReals)
@@ -335,6 +343,8 @@ class PureOptimizer:
                 rhs += sum(m.grid_capacity_bin[c]
                            * self.grid_capacity_options_parameters[c]['annual_injection_fee_per_kva']
                            for c in m.grid_capacity_options) * m.total_generators_capacity
+
+            rhs += m.peak * self.peak_cost_kW
             return m.net_operation_cost == rhs
 
         def operation_cost_multi_year_cstr(m, n):
@@ -367,6 +377,7 @@ class PureOptimizer:
                 rhs += sum(m.grid_capacity_bin[c]
                            * self.grid_capacity_options_parameters[c]['annual_injection_fee_per_kva']
                            for c in m.grid_capacity_options) * m.total_generators_capacity
+            rhs += m.peak[n] * self.peak_cost_kW
             for p in m.periods:
                 if (n * periods_per_year) <= p < (n + 1) * periods_per_year:
                     rhs += (m.imp_grid[p] * purchase_price[p] - m.exp_grid[p] * sale_price[p]) * weights[p]
@@ -466,8 +477,8 @@ class PureOptimizer:
         #     return m.storages_capacity[s] == 10
 
         def days_decoup_cstr(m, s, p):
-            if p % 24 == 0:
-                return m.soc[s, p] == 0.5 * m.usable_storages_capacity[s, p]
+            if p % 24 == 6:
+                return m.soc[s, p] == 0 * m.usable_storages_capacity[s, p]
             else:
                 return m.soc[s, p] <= m.usable_storages_capacity[s, p]
 
@@ -525,6 +536,14 @@ class PureOptimizer:
             total_inverters_capacity = sum(m.inverters_capacity[i] for i in self.entity.inverters)
             return total_pvs_capacity <= total_inverters_capacity * 2
 
+        def peak_cost_cstr(m, p):
+            return m.imp_grid[p]/self.delta_t <= m.peak
+
+        def peak_cost_multi_year_cstr(m, p):
+            periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+            n_p = int(p/periods_per_year)
+            return m.imp_grid[p]/self.delta_t <= m.peak[n_p]
+
         self.model.investment_cost_cstr = Constraint(rule=investment_cost_cstr)
         self.model.power_balance_cstr = Constraint(self.model.periods, rule=power_balance_cstr)
         self.model.non_steerable_generations_cstr = Constraint(self.model.non_steerable_generators, self.model.periods,
@@ -579,6 +598,7 @@ class PureOptimizer:
                                                                rule=linearization_constraint_3)
             self.model.usable_storage_capacity_cstr = Constraint(self.model.storages, self.model.periods,
                                                                  rule=usable_storage_capacity_cstr)
+            self.model.peak_cost_cstr = Constraint(self.model.periods, rule=peak_cost_multi_year_cstr)
 
         elif self.sizing_config.multi_stage_sizing:
             self.model.operation_cost_multi_year_cstr = Constraint(self.model.investment_horizon,
@@ -588,11 +608,13 @@ class PureOptimizer:
             self.model.usable_storage_capacity_multi_stage_cstr = Constraint(self.model.storages, self.model.periods,
                                                                             rule=usable_storage_capacity_multi_stage_cstr)
             self.model.no_reinvestment_year_0_cstr = Constraint(self.model.storages, rule=no_reinvestment_year_0_cstr)
+            self.model.peak_cost_cstr = Constraint(self.model.periods, rule=peak_cost_multi_year_cstr)
 
         else:
             self.model.operation_cost_cstr = Constraint(rule=operation_cost_cstr)
             self.model.usable_storage_capacity_cstr = Constraint(self.model.storages, self.model.periods,
                                                                  rule=usable_storage_capacity_cstr)
+            self.model.peak_cost_cstr = Constraint(self.model.periods, rule=peak_cost_cstr)
 
     def _create_objective(self):
         def obj_expression(model):
@@ -615,7 +637,7 @@ class PureOptimizer:
                          io_options={"symbolic_solver_labels": True})
         self.solving_duration = time.time() - t0_solve
         print("Solving time: %.2fs" % self.solving_duration)
-
+        print(self.results)
         obj = self.model.obj.value()
         PV_cap = []
         Inv_cap = []
@@ -654,7 +676,6 @@ class PureOptimizer:
                     H2_tank_cap.append(self.model.h2_tanks_capacity[t].value)
                     results.append(self.model.h2_tanks_capacity[t].value)
 
-
         # self.model.delta.display()
         # self.model.prop_connection_cost.display()
         # self.model.connection_fee.display()
@@ -662,6 +683,7 @@ class PureOptimizer:
         # self.model.soc.display()
         # self.model.usable_storages_capacity.display()
         # self.model.reinv_storages_capacity.display()
+        self.model.peak.display()
         # self.model.bin_reinvestment.display()
         # self.model.reinvestment_cost.display()
         # self.model.curtail.display()
@@ -712,23 +734,23 @@ class PureOptimizer:
             g_import[p] = - self.model.imp_grid[p].value
             g_export[p] = self.model.exp_grid[p].value
 
-        # x = range(self.number_periods)
-        # plt.figure()
-        # plt.plot(x, pv_production, color="tab:green", linewidth=2, label="PV production")
+        x = range(self.number_periods)
+        plt.figure()
+        plt.plot(x, pv_production, color="tab:green", linewidth=2, label="PV production")
         # plt.plot(x, pv_curtailment, color="tab:blue", linewidth=2, label="PV curtailment")
-        # # plt.plot(x, max_pv_production, color="tab:grey", linewidth=2, label="Max PV output")
+        plt.plot(x, max_pv_production, color="tab:grey", linewidth=2, label="Max PV output")
         # plt.plot(x, load, color="tab:red", linewidth=2, label="Load")
-        # plt.xlabel('Hours')
-        # plt.ylabel('Power [kW]')
-        # plt.grid()
-        # plt.legend()
-        # plt.figure()
-        # plt.plot(x, g_import, color="tab:red", linewidth=2, label="Grid import")
+        plt.xlabel('Hours')
+        plt.ylabel('Power [kW]')
+        plt.grid()
+        plt.legend()
+        plt.figure()
+        plt.plot(x, g_import, color="tab:red", linewidth=2, label="Grid import")
         # plt.plot(x, g_export, color="tab:blue", linewidth=2, label="Grid export")
-        # plt.xlabel('Hours')
-        # plt.ylabel('Power [kW]')
-        # plt.grid()
-        # plt.legend()
+        plt.xlabel('Hours')
+        plt.ylabel('Power [kW]')
+        plt.grid()
+        plt.legend()
         # plt.figure()
         # plt.plot(x, soc, color="tab:blue", linewidth=2, label="Storage SOC")
         # plt.plot(x, usable_capacity, color="tab:red", linewidth=2, label="Storage usable capacity")
@@ -755,7 +777,7 @@ class PureOptimizer:
         # plt.ylabel('Power [kW]')
         # plt.grid()
         # plt.legend()
-        # plt.show()
+        plt.show()
 
         # sys.exit("STOP")
 
@@ -780,3 +802,4 @@ class PureOptimizer:
     #         logging.info('Optimal size for device %s: %.2f(kW)' % (name, x_opt[i]))
     #     if not self.sizing_config.only_size:
     #         return self._x_to_microgrid(x_opt)
+
