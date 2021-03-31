@@ -1,8 +1,6 @@
 ##@package mipdaysselector
 # @author Sebastien MATHIEU
 
-from __future__ import division
-
 import math
 from pyomo.environ import *
 from pyomo.opt import SolverFactory

@@ -12,6 +12,8 @@ import daysxtractor
 import os
 import shutil
 from daysxtractor import Bins
+import json
+import numpy as np
 
 def create_rd_output_path(output_path):
     shutil.rmtree(output_path, ignore_errors=True)
@@ -128,10 +130,10 @@ class RepresentativeDays:
         """
         # Extract
         days_list = sorted(list(days.keys()))
-        days_list.append(days_list[-1] + datetime.timedelta(days=1))  # Add one day fro computation needs
+        # days_list.append(days_list[-1] + datetime.timedelta(days=1))  # Add one day fro computation needs
         print(days_list)
         extracted = df[df.index.map(lambda x: x.to_pydatetime().date() in days_list)]
-
+        # extracted.to_csv("results/rd.csv", sep=';', index=True)
         # Reindex
         t0 = df.iloc[0].name
         dt = df.iloc[1].name - t0
@@ -139,7 +141,13 @@ class RepresentativeDays:
 
         # Weights
         d0 = t0.to_pydatetime().date()
-        weights = {d0 + datetime.timedelta(days=i): days[d] for i, d in enumerate(days_list[:-1])}
+        weights = {d0 + datetime.timedelta(days=i): days[d] for i, d in enumerate(days_list)}
+        rd_weights = {str(d): days[d] for i, d in enumerate(days_list)}
+        # path = "results/" + "weights" + ".json"
+        # with open(path, 'w') as file:
+        #     json.dump(rd_weights, file)
+
+
 
         return extracted, weights
 

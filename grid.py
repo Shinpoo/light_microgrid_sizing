@@ -1,4 +1,5 @@
 from device import Device
+from capex import Capex
 class Grid:
     def __init__(self, grid_data):
         self.storages = [Device(s) for s in grid_data["storages"]]
@@ -10,6 +11,9 @@ class Grid:
         self.non_steerable_generators = [Device(g) for g in grid_data["non_steerable_generators"]]
         self.sheddable_loads = [Device(l) for l in grid_data["sheddable_loads"]]
         self.steerable_generators = [Device(g) for g in grid_data["steerable_generators"]]
+        self.pv_capex = [Capex(c) for c in grid_data["pv_capex"]]
+        self.inverter_capex = [Capex(c) for c in grid_data["inverter_capex"]]
+        self.battery_capex = [Capex(c) for c in grid_data["battery_capex"]]
         storages_name = [s.name for s in self.storages]
         h2_storages_name = [s.name for s in self.h2_storages]
         h2_tanks_name = [s.name for s in self.h2_tanks]

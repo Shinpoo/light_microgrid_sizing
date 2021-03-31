@@ -1,13 +1,10 @@
 from pyomo.environ import *
 from pyomo.opt import ProblemFormat
-#from microgrid_simulator.core import CommunityGrid
 from grid import Grid
 import time
-import sys
-from datetime import timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
-import logging
+
 
 class PureOptimizer:
     """
@@ -19,7 +16,7 @@ class PureOptimizer:
         self.selected_days = selected_days
         self.extracted_series = extracted_series
         self.extracted_weights = extracted_weights
-        self.sizing_config=config
+        self.sizing_config = config
         self.initial_state = initial_state
         self.solver_name = "gurobi"
         self._create_model()
@@ -37,15 +34,22 @@ class PureOptimizer:
         print("Building time: %.2fs" % self.building_duration)
 
     def _create_sets(self):
-        self.working_series = self.extracted_series[0].resample('60T').mean()  # work with 1h time step (imposed)
-        # remove last day because it is added for computational reasons
-        self.working_series = self.working_series.iloc[:-24]
+        delta_t_in_hours = self.sizing_config.simulation_step / 60.0
+        self.delta_t = delta_t_in_hours
 
-        if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
+        if self.sizing_config.simulation_step == 60.0:
+            self.working_series = self.extracted_series[0].resample('60T').mean()
+            print("Warning : working with a time step of 1h")
+        else:
+            self.working_series = self.extracted_series[0]
+
+        if self.sizing_config.multi_stage_sizing:
             self.number_periods = len(self.working_series) * self.sizing_config.investment_horizon
-            current_series = self.working_series.copy()
-            for y in range(self.sizing_config.investment_horizon - 1):
-                current_series.index += timedelta(days=self.sizing_config.num_representative_days - 1)
+            for y in range(1, self.sizing_config.investment_horizon):
+                if self.sizing_config.simulation_step == 60.0:
+                    current_series = self.extracted_series[y].resample('60T').mean()
+                else:
+                    current_series = self.extracted_series[y]
                 self.working_series = pd.concat([self.working_series, current_series])
         else:
             self.number_periods = len(self.working_series)
@@ -104,29 +108,33 @@ class PureOptimizer:
         self.model.steerable_generators = Set(dimen=1, initialize=indices)
 
     def _create_parameters(self):
-        delta_t_in_hours = 1  # imposed #TODO made this more general (we want to use 15min)
-        self.delta_t = delta_t_in_hours
-
         weights_list = []
         for key, value in self.extracted_weights[0].items():
             weights_list.append(value)
 
         # we have a list of weights per day, we want a list of weights per period
         self.weights = []
-        hour = 0
+        time = 0
         se = 0
 
-        if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
+        if self.delta_t == 1:
+            self.period_one_day = 24
+            p_6_am = 6
+        else:
+            self.period_one_day = 96
+            p_6_am = 24
+
+        if self.sizing_config.multi_stage_sizing:
             initial_weight_list = weights_list
             for y in range(self.sizing_config.investment_horizon - 1):
                 weights_list = weights_list + initial_weight_list
 
         for p in range(self.number_periods):
-            if hour == 24:
+            if time == self.period_one_day:
                 se += 1
-                hour = 0
+                time = 0
             self.weights.append(weights_list[se])
-            hour += 1
+            time += 1
 
         # for now number_of_cycles is a parameter (1 cycle per day)
         self.number_of_cycles = {}
@@ -134,10 +142,10 @@ class PureOptimizer:
         for n in range(self.sizing_config.investment_horizon):
             self.number_of_cycles[n] = [0.0] * int(self.number_periods)
             for p in range(int(self.number_periods)):
-                if p < n * periods_per_year:
+                if p <= n * periods_per_year:  # number_of_cycle = 0 for p < n * periods if battery is put at year n
                     self.number_of_cycles[n][p] = 0
                 else:
-                    if p % 24 == 6:
+                    if p % self.period_one_day == p_6_am:  # 1 full cycle at 6 AM
                         self.number_of_cycles[n][p] = self.number_of_cycles[n][p - 1] + self.weights[p]
                     else:
                         self.number_of_cycles[n][p] = self.number_of_cycles[n][p - 1]
@@ -159,29 +167,36 @@ class PureOptimizer:
         self.sale_price = list(self.working_series['sale_price'])
         self.peak_cost_kW = peak_cost_kW
 
+        self.pv_capex = self.entity.pv_capex
+        self.inverter_capex = self.entity.inverter_capex
+        self.battery_capex = self.entity.battery_capex
+        self.model.range_pv_capex = Set(initialize=range(len(self.pv_capex)))
+        self.model.range_inverter_capex = Set(initialize=range(len(self.inverter_capex)))
+        self.model.range_battery_capex = Set(initialize=range(len(self.battery_capex)))
+
     def _create_variables(self):
         # cost variables
         self.model.investment_cost = Var(within=NonNegativeReals)
-        if self.sizing_config.full_sizing:
-            self.model.net_operation_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
-            self.model.reinvestment_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
-            self.model.bin_reinvestment = Var(self.model.investment_horizon, within=Binary)
-            self.model.reinv_storages_capacity = Var(self.model.storages, self.model.investment_horizon,
-                                                     within=NonNegativeReals)
-            self.model.z_product = Var(self.model.storages, self.model.investment_horizon, within=NonNegativeReals)
-            self.model.peak = Var(self.model.investment_horizon, within=NonNegativeReals)
-            self.model.peak_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
-        elif self.sizing_config.multi_stage_sizing:
+        if self.sizing_config.multi_stage_sizing:
             self.model.net_operation_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
             self.model.reinvestment_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
             self.model.reinv_storages_capacity = Var(self.model.storages, self.model.investment_horizon,
                                                      within=NonNegativeReals)
+            self.model.reinv_battery_capex_capacity = Var(self.model.storages, self.model.investment_horizon,
+                                                          self.model.range_battery_capex, within=NonNegativeReals)
+            self.model.bin_reinv_battery_capex = Var(self.model.storages, self.model.investment_horizon,
+                                                     self.model.range_battery_capex, within=Binary)
             self.model.peak = Var(self.model.investment_horizon, within=NonNegativeReals)
             self.model.peak_cost = Var(self.model.investment_horizon, within=NonNegativeReals)
+            self.model.decoupling_days_storages_capacity = Var(self.model.storages, self.model.investment_horizon,
+                                                               within=NonNegativeReals)
+            self.model.usable_reinv_storages_capacity = Var(self.model.storages, self.model.periods,
+                                                         within=NonNegativeReals)
         else:
             self.model.net_operation_cost = Var(within=NonNegativeReals)
             self.model.peak = Var(within=NonNegativeReals)
             self.model.peak_cost = Var(within=NonNegativeReals)
+            self.model.decoupling_days_storages_capacity = Var(self.model.storages, within=NonNegativeReals)
 
         # operation variables
         self.model.charge = Var(self.model.storages, self.model.periods, within=NonNegativeReals)
@@ -203,9 +218,21 @@ class PureOptimizer:
 
         # sizing variables
         self.model.non_steerable_generators_capacity = Var(self.model.non_steerable_generators, within=NonNegativeReals)
-        self.model.storages_capacity = Var(self.model.storages, within=NonNegativeReals)
-        self.model.usable_storages_capacity = Var(self.model.storages, self.model.periods, within=NonNegativeReals)
         self.model.inverters_capacity = Var(self.model.inverters, within=NonNegativeReals)
+        self.model.pv_capex_capacity = Var(self.model.non_steerable_generators, self.model.range_pv_capex,
+                                           within=NonNegativeReals)
+        self.model.inverter_capex_capacity = Var(self.model.inverters, self.model.range_inverter_capex,
+                                                 within=NonNegativeReals)
+        self.model.bin_pv_capex = Var(self.model.non_steerable_generators, self.model.range_pv_capex, within=Binary)
+        self.model.bin_inverter_capex = Var(self.model.inverters, self.model.range_inverter_capex, within=Binary)
+
+        self.model.storages_capacity = Var(self.model.storages, within=NonNegativeReals)
+        self.model.battery_capex_capacity = Var(self.model.storages, self.model.range_battery_capex,
+                                                within=NonNegativeReals)
+        self.model.bin_battery_capex = Var(self.model.storages, self.model.range_battery_capex, within=Binary)
+
+        self.model.usable_storages_capacity = Var(self.model.storages, self.model.periods, within=NonNegativeReals)
+
         self.model.h2_capacity = Var(self.model.h2_storages, within=NonNegativeReals)
         self.model.h2_tanks_capacity = Var(self.model.h2_tanks, within=NonNegativeReals)
         self.model.steerable_generators_capacity = Var(self.model.steerable_generators, within=NonNegativeReals)
@@ -246,16 +273,19 @@ class PureOptimizer:
         def investment_cost_cstr(m):
             rhs = 0
             for g in self.entity.non_steerable_generators:
-                rhs += m.non_steerable_generators_capacity[g] * g.capex
+                for c in range(len(self.pv_capex)):
+                    rhs += m.pv_capex_capacity[g, c] * self.pv_capex[c].capex
 
             for i in self.entity.inverters:
-                rhs += m.inverters_capacity[i] * i.capex
+                for c in range(len(self.inverter_capex)):
+                    rhs += m.inverter_capex_capacity[i, c] * self.inverter_capex[c].capex
+
+            for s in self.entity.storages:
+                for c in range(len(self.battery_capex)):
+                    rhs += m.battery_capex_capacity[s, c] * self.battery_capex[c].capex
 
             for g in self.entity.steerable_generators:
                 rhs += m.steerable_generators_capacity[g] * g.capex
-
-            for s in self.entity.storages:
-                rhs += m.storages_capacity[s] * s.capex
 
             for h in self.entity.h2_storages:
                 rhs += m.h2_capacity[h] * h.capex
@@ -269,6 +299,42 @@ class PureOptimizer:
                 rhs += m.prop_connection_cost
 
             return m.investment_cost == rhs
+
+        def pv_capex_lower_cstr(m, g, c):
+            return m.pv_capex_capacity[g, c] >= self.pv_capex[c].lower_capacity * m.bin_pv_capex[g, c]
+
+        def pv_capex_upper_cstr(m, g, c):
+            return self.pv_capex[c].upper_capacity * m.bin_pv_capex[g, c] >= m.pv_capex_capacity[g, c]
+
+        def inverter_capex_lower_cstr(m, i, c):
+            return m.inverter_capex_capacity[i, c] >= self.inverter_capex[c].lower_capacity * m.bin_inverter_capex[i, c]
+
+        def inverter_capex_upper_cstr(m, i, c):
+            return self.inverter_capex[c].upper_capacity * m.bin_inverter_capex[i, c] >= m.inverter_capex_capacity[i, c]
+
+        def battery_capex_lower_cstr(m, s, c):
+            return m.battery_capex_capacity[s, c] >= self.battery_capex[c].lower_capacity * m.bin_battery_capex[s, c]
+
+        def battery_capex_upper_cstr(m, s, c):
+            return self.battery_capex[c].upper_capacity * m.bin_battery_capex[s, c] >= m.battery_capex_capacity[s, c]
+
+        def non_steerable_generators_capacity_cstr(m, g):
+            rhs = 0
+            for c in range(len(self.pv_capex)):
+                rhs += m.pv_capex_capacity[g, c]
+            return m.non_steerable_generators_capacity[g] == rhs
+
+        def inverters_capacity_cstr(m, i):
+            rhs = 0
+            for c in range(len(self.inverter_capex)):
+                rhs += m.inverter_capex_capacity[i, c]
+            return m.inverters_capacity[i] == rhs
+
+        def battery_capacity_cstr(m, s):
+            rhs = 0
+            for c in range(len(self.battery_capex)):
+                rhs += m.battery_capex_capacity[s, c]
+            return m.storages_capacity[s] == rhs
 
         def delta_cstr_1(m):
             M = 10000
@@ -314,16 +380,19 @@ class PureOptimizer:
             weights = self.weights
             rhs = 0
             for g in self.entity.non_steerable_generators:
-                rhs += m.non_steerable_generators_capacity[g] * g.opex
+                for c in range(len(self.pv_capex)):
+                    rhs += m.pv_capex_capacity[g, c] * self.pv_capex[c].capex * 0.01
 
             for i in self.entity.inverters:
-                rhs += m.inverters_capacity[i] * i.opex
+                for c in range(len(self.inverter_capex)):
+                    rhs += m.inverter_capex_capacity[i, c] * self.inverter_capex[c].capex * 0.01
+
+            for s in self.entity.storages:
+                for c in range(len(self.battery_capex)):
+                    rhs += m.battery_capex_capacity[s, c] * self.battery_capex[c].capex * 0.01
 
             for g in self.entity.steerable_generators:
                 rhs += m.steerable_generators_capacity[g] * g.opex
-
-            for s in self.entity.storages:
-                rhs += m.storages_capacity[s] * s.opex
 
             for h in self.entity.h2_storages:
                 rhs += m.h2_capacity[h] * h.opex
@@ -335,7 +404,9 @@ class PureOptimizer:
                 (m.imp_grid[p] * purchase_price[p] - m.exp_grid[p] * sale_price[p]) * weights[p] for p in m.periods)
 
             for g in self.entity.steerable_generators:
-                rhs += sum(m.steerable_generations[g, p] * self.delta_t * g.fuel_price / g.fuel_efficiency * weights[p] for p in m.periods)
+                rhs += sum(
+                    m.steerable_generations[g, p] * self.delta_t * g.fuel_price / g.fuel_efficiency * weights[p] for p
+                    in m.periods)
 
             if self.sizing_config.grid_connection_cost and self.sizing_config.grid_tied:
                 rhs += sum(m.grid_capacity_bin[c] * self.grid_capacity_options_parameters[c]['annual_fee']
@@ -354,16 +425,20 @@ class PureOptimizer:
             periods_per_year = self.number_periods / self.sizing_config.investment_horizon
             rhs = 0
             for g in self.entity.non_steerable_generators:
-                rhs += m.non_steerable_generators_capacity[g] * g.opex
+                for c in range(len(self.pv_capex)):
+                    rhs += m.pv_capex_capacity[g, c] * self.pv_capex[c].capex * 0.01
 
             for i in self.entity.inverters:
-                rhs += m.inverters_capacity[i] * i.opex
+                for c in range(len(self.inverter_capex)):
+                    rhs += m.inverter_capex_capacity[i, c] * self.inverter_capex[c].capex * 0.01
+
+            for s in self.entity.storages:
+                for c in range(len(self.battery_capex)):
+                    rhs += m.battery_capex_capacity[s, c] * self.battery_capex[c].capex * 0.01
+                    rhs += m.reinv_battery_capex_capacity[s, n, c] * self.battery_capex[c].capex * 0.01
 
             for g in self.entity.steerable_generators:
                 rhs += m.steerable_generators_capacity[g] * g.opex
-
-            for s in self.entity.storages:
-                rhs += m.storages_capacity[s] * s.opex
 
             for h in self.entity.h2_storages:
                 rhs += m.h2_capacity[h] * h.opex
@@ -382,21 +457,23 @@ class PureOptimizer:
                 if (n * periods_per_year) <= p < (n + 1) * periods_per_year:
                     rhs += (m.imp_grid[p] * purchase_price[p] - m.exp_grid[p] * sale_price[p]) * weights[p]
                     for g in self.entity.steerable_generators:
-                        rhs += m.steerable_generations[g, p] * self.delta_t * g.fuel_price / g.fuel_efficiency * weights[p]
+                        rhs += m.steerable_generations[g, p] * self.delta_t * g.fuel_price / g.fuel_efficiency * \
+                               weights[p]
             return m.net_operation_cost[n] == rhs
 
         def power_balance_cstr(m, p):
             return m.exp_grid[p] - m.imp_grid[p] == self.production_expr(m, p) - self.consumption_expr(m, p)
 
         def non_steerable_generations_cstr(m, g, p):
-            periods_per_year = self.number_periods / self.sizing_config.investment_horizon
-            year_of_period_p = int(p/periods_per_year)
-            rhs = self.non_steerable_generation_per_kW[g][p] * m.non_steerable_generators_capacity[g] \
-                * (1 + g.progression)**year_of_period_p
+            # periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+            # year_of_period_p = int(p/periods_per_year)
+            rhs = 0
+            rhs += self.non_steerable_generation_per_kW[g][p] * m.non_steerable_generators_capacity[g]
             return m.non_steerable_generations[g, p] <= rhs
 
         def curtailment_cstr(m, g, p):
-            rhs = self.non_steerable_generation_per_kW[g][p] * m.non_steerable_generators_capacity[g]
+            rhs = 0
+            rhs += self.non_steerable_generation_per_kW[g][p] * m.non_steerable_generators_capacity[g]
             rhs -= m.non_steerable_generations[g, p]
             return m.curtail[g, p] == rhs
 
@@ -430,57 +507,125 @@ class PureOptimizer:
         def usable_storage_capacity_cstr(m, s, p):
             return m.usable_storages_capacity[s, p] <= m.storages_capacity[s]
 
-        def usable_storage_capacity_full_sizing_cstr(m, s, p):
+        def usable_storage_capacity_multi_stage_cstr(m, s, p):
+
+            # periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+            # u_min = s.residual_capacity
+            # n_c_max = s.max_number_cycle
+            # n = int(p / periods_per_year)
+            # return m.usable_storages_capacity[s, p] == (1 + ((u_min - 1) / n_c_max) * self.number_of_cycles[n][p]) \
+            #        * m.installed_storages_capacity[s, n]
+
             u_min = s.residual_capacity
             n_c_max = s.max_number_cycle
-            rhs = (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p] + 1) * m.storages_capacity[s]
             periods_per_year = self.number_periods / self.sizing_config.investment_horizon
-            year_of_period_p = int(p/periods_per_year)
-            rhs += sum(m.z_product[s, n] * (1 - u_min) for n in range(year_of_period_p))
-            # z = bin_reinvestment * storages_capacity used to linearize product of a binary and continuous variable
+            year_period_p = int(p / periods_per_year)
+
+            rhs = 0
+
+            if self.number_of_cycles[0][p] <= n_c_max:
+                rhs += (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p] + 1) * m.storages_capacity[s]
+            else:
+                rhs += 0
+
+            if year_period_p > 0:
+                rhs += m.usable_reinv_storages_capacity[s, p]
+                # for n in range(year_period_p):
+                    # rhs += (((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
+                    # if self.number_of_cycles[n][p] <= n_c_max:
+                    #     rhs += (((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
+                    # else:
+                    #     rhs += 0
+
+            # rhs = (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p] + 1) * m.storages_capacity[s]
+            # if year_of_period_p == 0:
+            #     return m.usable_storages_capacity[s, p] == rhs
+            # else:
+            #     rhs += sum((((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
+            #                for n in range(year_of_period_p))
+            #     # if self.number_of_cycles[0][p] > n_c_max:
+            #     #     rhs -= (1 - (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p])) * m.storages_capacity[s]
+            #     # for n in range(year_of_period_p):
+            #     #     if self.number_of_cycles[n][p] > n_c_max:
+            #     #         rhs -= (1 - (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p])) * m.reinv_storages_capacity[s, n]
             return m.usable_storages_capacity[s, p] == rhs
 
-        def linearization_constraint_1(m, s, n):
-            b_cap_upper = 10000
-            return m.z_product[s, n] <= b_cap_upper * m.bin_reinvestment[n]
-
-        def linearization_constraint_2(m, s, n):
-            return m.z_product[s, n] <= m.storages_capacity[s]
-
-        def linearization_constraint_3(m, s, n):
-            b_cap_upper = 10000
-            return m.z_product[s, n] >= m.storages_capacity[s] - (1 - m.bin_reinvestment[n]) * b_cap_upper
-
-        def reinvestment_full_sizing_cstr(m, s, n):
-            return m.reinvestment_cost[n] == m.z_product[s, n] * s.capex
-
-        def usable_storage_capacity_multi_stage_cstr(m, s, p):
+        def usable_reinv_storages_capacity_cstr(m, s, p):
+            periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+            year_period_p = int(p / periods_per_year)
             u_min = s.residual_capacity
             n_c_max = s.max_number_cycle
-            periods_per_year = self.number_periods / self.sizing_config.investment_horizon
-            year_of_period_p = int(p/periods_per_year)
-            rhs = (((u_min - 1) / n_c_max) * self.number_of_cycles[0][p] + 1) * m.storages_capacity[s]
-            if year_of_period_p == 0:
-                return m.usable_storages_capacity[s, p] == rhs
+
+            rhs = 0
+
+            for n in range(year_period_p):
+                if self.number_of_cycles[n][p] <= n_c_max:
+                    rhs += (((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
+
+            return m.usable_reinv_storages_capacity[s, p] == rhs
+
+            # if self.number_of_cycles[n][p] <= n_c_max:
+            #     rhs = 0
+            #     rhs += (((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
+            #     return m.usable_reinv_storages_capacity[s, p] == rhs
+            # else:
+            #     return m.usable_reinv_storages_capacity[s, p] == 0
+
+        def reinv_battery_capex_lower_cstr(m, s, n, c):
+            return m.reinv_battery_capex_capacity[s, n, c] >= self.battery_capex[c].lower_capacity * \
+                   m.bin_reinv_battery_capex[s, n, c]
+
+        def reinv_battery_capex_upper_cstr(m, s, n, c):
+            return self.battery_capex[c].upper_capacity * m.bin_reinv_battery_capex[s, n, c] >= \
+                   m.reinv_battery_capex_capacity[s, n, c]
+
+        def reinvestment_storages_capacity_cstr(m, s, n):
+            rhs = 0
+            for c in range(len(self.battery_capex)):
+                rhs += m.reinv_battery_capex_capacity[s, n, c]
+            return m.reinv_storages_capacity[s, n] == rhs
+
+        def reinvestment_multi_stage_cstr(m, n):
+            rhs = 0
+            for s in self.entity.storages:
+                for c in range(len(self.battery_capex)):
+                    rhs += m.reinv_battery_capex_capacity[s, n, c] * self.battery_capex[c].capex
+            return m.reinvestment_cost[n] == rhs
+
+        def no_reinvestment_first_years_cstr(m, s, n):
+            if n < 5:
+                return m.reinv_storages_capacity[s, n] >= 0
             else:
-                rhs += sum((((u_min - 1) / n_c_max) * self.number_of_cycles[n][p] + 1) * m.reinv_storages_capacity[s, n]
-                           for n in range(year_of_period_p))
-                return m.usable_storages_capacity[s, p] == rhs
+                return m.reinv_storages_capacity[s, n] >= 0
 
-        def reinvestment_multi_stage_cstr(m, s, n):
-            return m.reinvestment_cost[n] == m.reinv_storages_capacity[s, n] * s.capex
-
-        def no_reinvestment_year_0_cstr(m, s):
-            return m.reinv_storages_capacity[s, 0] == 0
-
+        # def reinvestmen_year_cstr(m, s):
+        #     lhs = 0
+        #     n_start_impose_reinv = 10
+        #     for n in range(n_start_impose_reinv, self.sizing_config.investment_horizon):
+        #         lhs += m.reinv_storages_capacity[s, n]
+        #     return lhs >= m.storages_capacity[s]
+        #
         # def min_battery_capacity_cstr(m, s):
-        #     return m.storages_capacity[s] == 10
+        #     return m.storages_capacity[s] == 100
 
-        def days_decoup_cstr(m, s, p):
-            if p % 24 == 6:
-                return m.soc[s, p] == 0 * m.usable_storages_capacity[s, p]
+        def days_decoup_cstr_1(m, s, p):
+            if p % self.period_one_day == 6:
+                if self.sizing_config.multi_stage_sizing:
+                    periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+                    n_p = int(p / periods_per_year)
+                    return m.soc[s, p] == m.decoupling_days_storages_capacity[s, n_p]
+                else:
+                    return m.soc[s, p] == m.decoupling_days_storages_capacity[s]
             else:
                 return m.soc[s, p] <= m.usable_storages_capacity[s, p]
+
+        def days_decoup_cstr_2(m, s, p):
+            if self.sizing_config.multi_stage_sizing:
+                periods_per_year = self.number_periods / self.sizing_config.investment_horizon
+                n_p = int(p / periods_per_year)
+                return m.decoupling_days_storages_capacity[s, n_p] <= m.usable_storages_capacity[s, p]
+            else:
+                return m.decoupling_days_storages_capacity[s] <= m.usable_storages_capacity[s, p]
 
         def grid_connection_choice_cstr(m):
             return sum(m.grid_capacity_bin[c] for c in m.grid_capacity_options) <= 1
@@ -492,8 +637,6 @@ class PureOptimizer:
 
         def total_generators_capacity_cstr(m):
             rhs = 0
-            # for g in self.entity.non_steerable_generators:
-            #     total_generators_capacity += m.non_steerable_generators_capacity[g]
             for i in self.entity.inverters:
                 rhs += m.inverters_capacity[i]
             for g in self.entity.steerable_generators:
@@ -532,17 +675,19 @@ class PureOptimizer:
             return m.exp_grid[p] == 0
 
         def inverter_pv_cstr(m):
-            total_pvs_capacity = sum(m.non_steerable_generators_capacity[g] for g in self.entity.non_steerable_generators)
-            total_inverters_capacity = sum(m.inverters_capacity[i] for i in self.entity.inverters)
+            total_pvs_capacity = sum(m.non_steerable_generators_capacity[g]
+                                     for g in self.entity.non_steerable_generators)
+            total_inverters_capacity = sum(m.inverters_capacity[i]
+                                           for i in self.entity.inverters)
             return total_pvs_capacity <= total_inverters_capacity * 2
 
         def peak_cost_cstr(m, p):
-            return m.imp_grid[p]/self.delta_t <= m.peak
+            return m.imp_grid[p] / self.delta_t <= m.peak
 
         def peak_cost_multi_year_cstr(m, p):
             periods_per_year = self.number_periods / self.sizing_config.investment_horizon
-            n_p = int(p/periods_per_year)
-            return m.imp_grid[p]/self.delta_t <= m.peak[n_p]
+            n_p = int(p / periods_per_year)
+            return m.imp_grid[p] / self.delta_t <= m.peak[n_p]
 
         self.model.investment_cost_cstr = Constraint(rule=investment_cost_cstr)
         self.model.power_balance_cstr = Constraint(self.model.periods, rule=power_balance_cstr)
@@ -557,15 +702,36 @@ class PureOptimizer:
         self.model.max_discharge_cstr = Constraint(self.model.storages, self.model.periods, rule=max_discharge_cstr)
         self.model.storage_level_rule = Constraint(self.model.storages, self.model.periods, rule=storage_level_rule)
         self.model.soc_cstr = Constraint(self.model.storages, self.model.periods, rule=soc_cstr)
-        self.model.days_decoup_cstr = Constraint(self.model.storages, self.model.periods, rule=days_decoup_cstr)
+        self.model.days_decoup_cstr_1 = Constraint(self.model.storages, self.model.periods, rule=days_decoup_cstr_1)
+        self.model.days_decoup_cstr_2 = Constraint(self.model.storages, self.model.periods, rule=days_decoup_cstr_2)
 
         self.model.h2_stored_rule = Constraint(self.model.h2_storages, self.model.periods, rule=h2_stored_rule)
         self.model.h2_max_charge_cstr = Constraint(self.model.h2_storages, self.model.periods, rule=h2_max_charge_cstr)
-        self.model.h2_max_discharge_cstr = Constraint(self.model.h2_storages, self.model.periods, rule=h2_max_discharge_cstr)
+        self.model.h2_max_discharge_cstr = Constraint(self.model.h2_storages, self.model.periods,
+                                                      rule=h2_max_discharge_cstr)
         if len(self.entity.h2_tanks) > 0:
             self.model.h2_tanks_cstr = Constraint(self.model.periods, rule=h2_tanks_cstr)
 
         self.model.inverter_pv_cstr = Constraint(rule=inverter_pv_cstr)
+
+        self.model.pv_capex_lower_cstr = Constraint(self.model.non_steerable_generators, self.model.range_pv_capex,
+                                                    rule=pv_capex_lower_cstr)
+        self.model.pv_capex_upper_cstr = Constraint(self.model.non_steerable_generators, self.model.range_pv_capex,
+                                                    rule=pv_capex_upper_cstr)
+        self.model.inverter_capex_lower_cstr = Constraint(self.model.inverters, self.model.range_inverter_capex,
+                                                          rule=inverter_capex_lower_cstr)
+        self.model.inverter_capex_upper_cstr = Constraint(self.model.inverters, self.model.range_inverter_capex,
+                                                          rule=inverter_capex_upper_cstr)
+        self.model.battery_capex_lower_cstr = Constraint(self.model.storages, self.model.range_battery_capex,
+                                                         rule=battery_capex_lower_cstr)
+        self.model.battery_capex_upper_cstr = Constraint(self.model.storages, self.model.range_battery_capex,
+                                                         rule=battery_capex_upper_cstr)
+        self.model.non_steerable_generators_capacity_cstr = Constraint(self.model.non_steerable_generators,
+                                                                       rule=non_steerable_generators_capacity_cstr)
+        self.model.inverters_capacity_cstr = Constraint(self.model.inverters, rule=inverters_capacity_cstr)
+        self.model.battery_capacity_cstr = Constraint(self.model.storages, rule=battery_capacity_cstr)
+
+        # self.model.min_battery_capacity_cstr = Constraint(self.model.storages, rule=min_battery_capacity_cstr)
 
         if not self.sizing_config.grid_tied:
             self.model.offgrid_import_cstr = Constraint(self.model.periods, rule=offgrid_import_cstr)
@@ -582,33 +748,28 @@ class PureOptimizer:
             self.model.prop_connection_cost_cstr2_2 = Constraint(rule=prop_connection_cost_cstr_2_2)
             self.model.total_generators_capacity_cstr = Constraint(rule=total_generators_capacity_cstr)
 
-        if self.sizing_config.full_sizing:
+        if self.sizing_config.multi_stage_sizing:
             self.model.operation_cost_multi_year_cstr = Constraint(self.model.investment_horizon,
                                                                    rule=operation_cost_multi_year_cstr)
-            self.model.usable_storage_capacity_full_sizing_cstr = Constraint(self.model.storages, self.model.periods,
-                                                                            rule=usable_storage_capacity_full_sizing_cstr)
-
-            self.model.reinvestment_full_sizing_cstr = Constraint(self.model.storages, self.model.investment_horizon,
-                                                      rule=reinvestment_full_sizing_cstr)
-            self.model.linearization_constraint_1 = Constraint(self.model.storages, self.model.investment_horizon,
-                                                               rule=linearization_constraint_1)
-            self.model.linearization_constraint_2 = Constraint(self.model.storages, self.model.investment_horizon,
-                                                               rule=linearization_constraint_2)
-            self.model.linearization_constraint_3 = Constraint(self.model.storages, self.model.investment_horizon,
-                                                               rule=linearization_constraint_3)
-            self.model.usable_storage_capacity_cstr = Constraint(self.model.storages, self.model.periods,
-                                                                 rule=usable_storage_capacity_cstr)
-            self.model.peak_cost_cstr = Constraint(self.model.periods, rule=peak_cost_multi_year_cstr)
-
-        elif self.sizing_config.multi_stage_sizing:
-            self.model.operation_cost_multi_year_cstr = Constraint(self.model.investment_horizon,
-                                                                   rule=operation_cost_multi_year_cstr)
-            self.model.reinvestment_multi_stage_cstr = Constraint(self.model.storages, self.model.investment_horizon,
-                                                      rule=reinvestment_multi_stage_cstr)
+            self.model.reinvestment_multi_stage_cstr = Constraint(self.model.investment_horizon,
+                                                                  rule=reinvestment_multi_stage_cstr)
             self.model.usable_storage_capacity_multi_stage_cstr = Constraint(self.model.storages, self.model.periods,
-                                                                            rule=usable_storage_capacity_multi_stage_cstr)
-            self.model.no_reinvestment_year_0_cstr = Constraint(self.model.storages, rule=no_reinvestment_year_0_cstr)
+                                                                             rule=usable_storage_capacity_multi_stage_cstr)
+            self.model.no_reinvestment_first_years_cstr = Constraint(self.model.storages, self.model.investment_horizon,
+                                                                     rule=no_reinvestment_first_years_cstr)
             self.model.peak_cost_cstr = Constraint(self.model.periods, rule=peak_cost_multi_year_cstr)
+
+            self.model.reinv_battery_capex_lower_cstr = Constraint(self.model.storages, self.model.investment_horizon,
+                                                                   self.model.range_battery_capex,
+                                                                   rule=reinv_battery_capex_lower_cstr)
+            self.model.reinv_battery_capex_upper_cstr = Constraint(self.model.storages, self.model.investment_horizon,
+                                                                   self.model.range_battery_capex,
+                                                                   rule=reinv_battery_capex_upper_cstr)
+            self.model.reinvestment_storages_capacity_cstr = Constraint(self.model.storages,
+                                                                        self.model.investment_horizon,
+                                                                        rule=reinvestment_storages_capacity_cstr)
+            self.model.usable_reinv_storages_capacity_cstr = Constraint(self.model.storages, self.model.periods,
+                                                                     rule=usable_reinv_storages_capacity_cstr)
 
         else:
             self.model.operation_cost_cstr = Constraint(rule=operation_cost_cstr)
@@ -619,7 +780,7 @@ class PureOptimizer:
     def _create_objective(self):
         def obj_expression(model):
             d = self.sizing_config.discount_rate
-            if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
+            if self.sizing_config.multi_stage_sizing:
                 return - model.investment_cost - sum(
                     (model.reinvestment_cost[n] + model.net_operation_cost[n]) / (1 + d) ** n for n in
                     self.model.investment_horizon)
@@ -630,11 +791,12 @@ class PureOptimizer:
         self.model.obj = Objective(rule=obj_expression, sense=maximize)
 
     def optimize_function(self):
+        self.model.write(filename="damClearing.lp", format=ProblemFormat.cpxlp,
+                         io_options={"symbolic_solver_labels": True})
         t0_solve = time.time()
         solver = SolverFactory(self.solver_name)
         self.results = solver.solve(self.model)
-        self.model.write(filename="damClearing.lp", format=ProblemFormat.cpxlp,
-                         io_options={"symbolic_solver_labels": True})
+
         self.solving_duration = time.time() - t0_solve
         print("Solving time: %.2fs" % self.solving_duration)
         print(self.results)
@@ -664,7 +826,7 @@ class PureOptimizer:
                 if s.name == device_name:
                     Battery_cap.append(self.model.storages_capacity[s].value)
                     results.append(self.model.storages_capacity[s].value)
-                    if self.sizing_config.full_sizing or self.sizing_config.multi_stage_sizing:
+                    if self.sizing_config.multi_stage_sizing:
                         for n in range(self.sizing_config.investment_horizon):
                             total_battery_reinvestment += self.model.reinv_storages_capacity[s, n].value
             for h in self.entity.h2_storages:
@@ -678,15 +840,22 @@ class PureOptimizer:
 
         # self.model.delta.display()
         # self.model.prop_connection_cost.display()
-        # self.model.connection_fee.display()
         # self.model.charge.display()
         # self.model.soc.display()
         # self.model.usable_storages_capacity.display()
         # self.model.reinv_storages_capacity.display()
+        self.model.pv_capex_capacity.display()
+        self.model.inverter_capex_capacity.display()
+        self.model.battery_capex_capacity.display()
+        # self.model.reinv_battery_capex_capacity.display()
+
         self.model.peak.display()
+        self.model.decoupling_days_storages_capacity.display()
         # self.model.bin_reinvestment.display()
         # self.model.reinvestment_cost.display()
         # self.model.curtail.display()
+        self.model.steerable_generators_capacity.display()
+        self.model.inverters_capacity.display
         print("PV = %s kWp" % PV_cap)
         print("Inverter = %s KVA" % Inv_cap)
         print("BESS = %s kWh" % Battery_cap)
@@ -721,7 +890,8 @@ class PureOptimizer:
             for g in self.entity.non_steerable_generators:
                 pv_production[p] += self.model.non_steerable_generations[g, p].value
                 pv_curtailment[p] += self.model.curtail[g, p].value
-                max_pv_production[p] += self.non_steerable_generation_per_kW[g][p] * self.model.non_steerable_generators_capacity[g].value
+                max_pv_production[p] += self.non_steerable_generation_per_kW[g][p] * \
+                                        self.model.non_steerable_generators_capacity[g].value
             for s in self.entity.storages:
                 soc[p] += self.model.soc[s, p].value
                 usable_capacity[p] += self.model.usable_storages_capacity[s, p].value
@@ -739,7 +909,7 @@ class PureOptimizer:
         plt.plot(x, pv_production, color="tab:green", linewidth=2, label="PV production")
         # plt.plot(x, pv_curtailment, color="tab:blue", linewidth=2, label="PV curtailment")
         plt.plot(x, max_pv_production, color="tab:grey", linewidth=2, label="Max PV output")
-        # plt.plot(x, load, color="tab:red", linewidth=2, label="Load")
+        plt.plot(x, load, color="tab:red", linewidth=2, label="Load")
         plt.xlabel('Hours')
         plt.ylabel('Power [kW]')
         plt.grid()
@@ -751,20 +921,21 @@ class PureOptimizer:
         plt.ylabel('Power [kW]')
         plt.grid()
         plt.legend()
-        # plt.figure()
-        # plt.plot(x, soc, color="tab:blue", linewidth=2, label="Storage SOC")
-        # plt.plot(x, usable_capacity, color="tab:red", linewidth=2, label="Storage usable capacity")
-        # plt.xlabel('Hours')
-        # plt.ylabel('Capacity [kWh]')
-        # plt.grid()
-        # plt.legend()
-        # plt.figure()
-        # plt.plot(x, charge, color="tab:blue", linewidth=2, label="Battery charge")
-        # plt.plot(x, discharge, color="tab:red", linewidth=2, label="Battery discharge")
-        # plt.xlabel('Hours')
-        # plt.ylabel('Power [kW]')
-        # plt.grid()
-        # plt.legend()
+        plt.figure()
+        plt.plot(x, soc, color="tab:blue", linewidth=2, label="Storage SOC")
+        plt.plot(x, usable_capacity, color="tab:red", linewidth=2, label="Storage usable capacity")
+        plt.xlabel('Hours')
+        plt.ylabel('Capacity [kWh]')
+        plt.grid()
+        plt.legend()
+        plt.figure()
+        plt.plot(x, charge, color="tab:blue", linewidth=2, label="Battery charge")
+        plt.plot(x, discharge, color="tab:red", linewidth=2, label="Battery discharge")
+        plt.xlabel('Hours')
+        plt.ylabel('Power [kW]')
+        plt.grid()
+        plt.legend()
+
         # plt.figure()
         # plt.plot(x, h2_energy, color="tab:blue", linewidth=2, label="H2 stored energy")
         # plt.xlabel('Hours')
@@ -782,7 +953,6 @@ class PureOptimizer:
         # sys.exit("STOP")
 
         return results, -obj
-
 
     # def optimize(self, maximum_iterations):
     #     """
@@ -802,4 +972,3 @@ class PureOptimizer:
     #         logging.info('Optimal size for device %s: %.2f(kW)' % (name, x_opt[i]))
     #     if not self.sizing_config.only_size:
     #         return self._x_to_microgrid(x_opt)
-

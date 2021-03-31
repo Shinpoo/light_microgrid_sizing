@@ -8,7 +8,7 @@ from geopy.geocoders import Nominatim
 
 geolocator = Nominatim(user_agent="light_microgrid_sizing")
 rd = RepresentativeDays()
-simple_sizing = False
+simple_sizing = True
 
 if simple_sizing:
     with open("data/ANBRIMEX2/hs_AMBRIMEX.json", 'r') as file:
