@@ -5,3 +5,6 @@
 .vscode/
 results/
 .idea/
+*.h5
+nn_model/
+*.ipynb_checkpoints

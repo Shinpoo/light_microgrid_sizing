@@ -10,20 +10,20 @@ from yellowbrick.regressor import ResidualsPlot, PredictionError
 scaler = StandardScaler()
 # neigh = KNeighborsRegressor(n_neighbors=5)
 # regression_visualizers = [ResidualsPlot(neigh), PredictionError(neigh)]
-features = ["longitude", "latitude", "peak load"]
+features = ["longitude", "latitude", "peak_load", "off-grid","avg_peak_winter","avg_peak_spring","avg_peak_summer","avg_peak_autumn","avg_base_winter","avg_base_spring","avg_base_summer","avg_base_autumn"]
 
-case_name = "ANBRIMEX"
-df = pd.read_csv("results/" + case_name + "_final.csv", sep=";|,", engine="python", index_col='index')
+case_name = "mg_sizing_dataset_with_loc"
+df = pd.read_csv("results/" + case_name + ".csv", sep=";|,", engine="python", index_col='index')
 #df = df.loc[df['off-grid'] == 1]
-X = df[["longitude", "latitude", "peak load", "off-grid"]]
+X = df[features]
 scaler.fit(X)
 X = scaler.transform(X)
 # X = pd.DataFrame(scaler.transform(X), index=X.index, columns=X.columns)
-
-y = df["PV"]
+targets = ["PV","BAT","RBAT","INV","GEN","NPV"]
+y = df[targets]
 cv = StratifiedKFold(12)
-param_range = np.arange(1, 60, 1)
-cv = KFold(n_splits=12, random_state=42, shuffle=True)
+param_range = np.arange(1, 30, 1)
+cv = KFold(n_splits=12, random_state=40, shuffle=True)
 
 viz = ValidationCurve(
     KNeighborsRegressor(), param_name="n_neighbors", param_range=param_range, scoring="r2", cv=cv, n_jobs=8

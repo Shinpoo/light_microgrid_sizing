@@ -6,11 +6,11 @@ from yellowbrick.target.feature_correlation import feature_correlation
 
 import matplotlib.pyplot as plt
 
-case_name = "ANBRIMEX"
-df = pd.read_csv("results/" + case_name + "_final.csv", sep=";|,", engine="python", index_col='index')
+case_name = "mg_sizing_dataset_with_loc"
+df = pd.read_csv("results/" + case_name + ".csv", sep=";|,", engine="python", index_col='index')
 
-features = ["longitude", "latitude", "peak load", "off-grid"]
-target = "PV"
+features = ["longitude", "latitude", "peak_load", "off-grid","avg_peak_winter","avg_peak_spring","avg_peak_summer","avg_peak_autumn","avg_base_winter","avg_base_spring","avg_base_summer","avg_base_autumn"]
+target = ["PV","BAT"]
 
 scaler = StandardScaler()
 #df = df.loc[df['off-grid'] == 1]

@@ -13,7 +13,7 @@
     "grid_connection_cost": false,
     "full_sizing": false,
     "multi_stage_sizing": true,
-    "save_days": "repr_days.pck"
+    "save_days": ""
   },
    "connection_types": [
     {

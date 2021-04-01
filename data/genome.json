@@ -1,0 +1,264 @@
+{
+  "parameters": {
+    "case_name": "GENOME",
+    "initial_investment": 0.0,
+    "investment_horizon": 20,
+    "optimizer_method": "optimization",
+    "simulation_step": 60.0,
+    "discount_rate": 0.02,
+    "num_representative_days": 10,
+    "representative_days_time_limit": 20,
+    "representative_days_solver": "gurobi",
+    "grid_tied": true,
+    "grid_connection_cost": false,
+    "full_sizing": false,
+    "multi_stage_sizing": true,
+    "save_days": ""
+  },
+   "connection_types": [
+    {
+      "type": "TMT",
+      "upper_limit": 10000,
+      "proportional_connection_cost": 8.19,
+      "fix_connection_cost": 20735,
+      "annual_fee": 1588,
+      "annual_injection_fee_per_kva": 0.3137836,
+      "k_eco": 0.47,
+      "green_certificate": 0
+    },
+    {
+      "type": "MT",
+      "upper_limit": 5000,
+      "proportional_connection_cost": 66.09,
+      "fix_connection_cost": 11910,
+      "annual_fee": 1295,
+      "annual_injection_fee_per_kva": 0.0942671,
+      "k_eco": 0.63,
+      "green_certificate": 0
+    },
+    {
+      "type": "TBT",
+      "upper_limit": 250,
+      "proportional_connection_cost": 102.75,
+      "fix_connection_cost": 4920,
+      "annual_fee": 452.14,
+      "annual_injection_fee_per_kva": 2.5757465,
+      "k_eco": 0.79,
+      "green_certificate": 0
+    },
+    {
+      "type": "BT",
+      "upper_limit": 100,
+      "proportional_connection_cost": 204,
+      "fix_connection_cost": 1000,
+      "annual_fee": 34.65,
+      "annual_injection_fee_per_kva": 2.5757465,
+      "k_eco": 0.79,
+      "green_certificate": 0
+    }
+  ],
+  "storages": [
+    {
+      "name": "Battery",
+      "type": "BasicStorage",
+      "capacity": 1,
+      "max_charge_rate": 1,
+      "max_discharge_rate": 1,
+      "charge_efficiency": 0.95,
+      "discharge_efficiency": 0.95,
+      "max_number_cycle": 4000,
+      "residual_capacity": 0.6,
+      "capex":350,
+      "opex":3.5,
+      "to_size":true
+    }
+  ],
+
+  "h2_storages": [
+
+  ],
+
+  "h2_tanks": [
+
+  ],
+
+  "flexible_loads": [],
+  "non_flexible_loads": [
+    {
+      "capacity": 49.0,
+      "name": "Load",
+      "connection_type": "BT",
+      "peak_cost_kW": 50,
+      "progression": 0.00
+    }
+  ],
+  "inverters": [
+    {
+      "name": "Inverter"
+    }
+  ],
+  "non_steerable_generators": [
+    {
+      "name": "PV",
+      "progression": -0.01
+    }
+  ],
+  "sheddable_loads": [],
+  "steerable_generators": [
+    {
+      "name": "genset",
+      "type": "SimpleGenset",
+      "capacity": 1,
+      "fuel_price": 1,
+      "fuel_efficiency": 3,
+      "capex": 1000,
+      "opex": 10,
+      "to_size": true
+    }
+  ],
+  "pv_capex": [
+    {
+      "name": "PV_capex_0",
+      "lower_capacity": 0,
+      "upper_capacity": 2,
+      "capex": 1050
+    },
+    {
+      "name": "PV_capex_1",
+      "lower_capacity": 2,
+      "upper_capacity": 5,
+      "capex": 910
+    },
+    {
+      "name": "PV_capex_2",
+      "lower_capacity": 5,
+      "upper_capacity": 10,
+      "capex": 770
+    },
+    {
+      "name": "PV_capex_3",
+      "lower_capacity": 10,
+      "upper_capacity": 50,
+      "capex": 700
+    },
+    {
+      "name": "PV_capex_4",
+      "lower_capacity": 50,
+      "upper_capacity": 100,
+      "capex": 630
+    },
+    {
+      "name": "PV_capex_5",
+      "lower_capacity": 100,
+      "upper_capacity": 500,
+      "capex": 560
+    },
+    {
+      "name": "PV_capex_6",
+      "lower_capacity": 500,
+      "upper_capacity": 1500,
+      "capex": 490
+    },
+    {
+      "name": "PV_capex_7",
+      "lower_capacity": 1500,
+      "upper_capacity": 100000,
+      "capex": 420
+    }
+  ],
+  "inverter_capex": [
+    {
+      "name": "INV_capex_0",
+      "lower_capacity": 0,
+      "upper_capacity": 2,
+      "capex": 450
+    },
+    {
+      "name": "INV_capex_1",
+      "lower_capacity": 2,
+      "upper_capacity": 5,
+      "capex": 390
+    },
+    {
+      "name": "INV_capex_2",
+      "lower_capacity": 5,
+      "upper_capacity": 10,
+      "capex": 330
+    },
+    {
+      "name": "INV_capex_3",
+      "lower_capacity": 10,
+      "upper_capacity": 50,
+      "capex": 300
+    },
+    {
+      "name": "INV_capex_4",
+      "lower_capacity": 50,
+      "upper_capacity": 100,
+      "capex": 270
+    },
+    {
+      "name": "INV_capex_5",
+      "lower_capacity": 100,
+      "upper_capacity": 500,
+      "capex": 240
+    },
+    {
+      "name": "INV_capex_6",
+      "lower_capacity": 500,
+      "upper_capacity": 1500,
+      "capex": 210
+    },
+    {
+      "name": "INV_capex_7",
+      "lower_capacity": 1500,
+      "upper_capacity": 100000,
+      "capex": 180
+    }
+  ],
+
+  "battery_capex": [
+    {
+      "name": "BAT_capex_0",
+      "lower_capacity": 0,
+      "upper_capacity": 2,
+      "capex": 600
+    },
+    {
+      "name": "BAT_capex_1",
+      "lower_capacity": 2,
+      "upper_capacity": 5,
+      "capex": 500
+    },
+    {
+      "name": "BAT_capex_2",
+      "lower_capacity": 5,
+      "upper_capacity": 50,
+      "capex": 400
+    },
+    {
+      "name": "BAT_capex_3",
+      "lower_capacity": 50,
+      "upper_capacity": 100,
+      "capex": 350
+    },
+    {
+      "name": "BAT_capex_4",
+      "lower_capacity": 100,
+      "upper_capacity": 500,
+      "capex": 300
+    },
+    {
+      "name": "BAT_capex_5",
+      "lower_capacity": 500,
+      "upper_capacity": 1500,
+      "capex": 250
+    },
+    {
+      "name": "BAT_capex_6",
+      "lower_capacity": 1500,
+      "upper_capacity": 1000000,
+      "capex": 200
+    }
+  ]
+}
