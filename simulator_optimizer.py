@@ -6,13 +6,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-class PureOptimizer:
+class SimulatorOptimizer:
     """
     Class that instantiates the pure optimization algorithm
     """
 
     def __init__(self, microgrid, selected_days, extracted_series, extracted_weights, config,
-                 timeseries, use_365_days):
+                 timeseries, sizing_results, use_365_days):
         self.microgrid = microgrid
         self.selected_days = selected_days
         self.extracted_series = extracted_series
@@ -21,6 +21,7 @@ class PureOptimizer:
         self.solver_name = "gurobi"
         self.timeseries = timeseries
         self.use_365_days = use_365_days
+        self.sizing_results = sizing_results
         self._create_model()
         self.optimal_sizing = {}
 
@@ -332,17 +333,29 @@ class PureOptimizer:
                 rhs += m.pv_capex_capacity[g, c]
             return m.non_steerable_generators_capacity[g] == rhs
 
+        def impose_non_steerable_generators_capacity_cstr(m, g):
+            # TODO This works only when 1 non steerable generator
+            return m.non_steerable_generators_capacity[g] == self.sizing_results['PV'][0]
+
         def inverters_capacity_cstr(m, i):
             rhs = 0
             for c in range(len(self.inverter_capex)):
                 rhs += m.inverter_capex_capacity[i, c]
             return m.inverters_capacity[i] == rhs
 
+        def impose_inverters_capacity_cstr(m, i):
+            # TODO This works only when 1 inverters
+            return m.inverters_capacity[i] == self.sizing_results['INV'][0]
+
         def battery_capacity_cstr(m, s):
             rhs = 0
             for c in range(len(self.battery_capex)):
                 rhs += m.battery_capex_capacity[s, c]
             return m.storages_capacity[s] == rhs
+
+        def impose_battery_capacity_cstr(m, s):
+            # TODO This works only when 1 inverters
+            return m.storages_capacity[s] == self.sizing_results['BAT'][0]
 
         def delta_cstr_1(m):
             M = 10000
@@ -740,6 +753,12 @@ class PureOptimizer:
         self.model.battery_capacity_cstr = Constraint(self.model.storages, rule=battery_capacity_cstr)
 
         # self.model.min_battery_capacity_cstr = Constraint(self.model.storages, rule=min_battery_capacity_cstr)
+
+        self.model.impose_non_steerable_generators_capacity_cstr = Constraint(self.model.non_steerable_generators,
+                                                                        rule=impose_non_steerable_generators_capacity_cstr)
+        self.model.impose_inverters_capacity_cstr = Constraint(self.model.inverters, rule=impose_inverters_capacity_cstr)
+
+        self.model.impose_battery_capacity_cstr = Constraint(self.model.storages, rule=impose_battery_capacity_cstr)
 
         if not self.sizing_config.grid_tied:
             self.model.offgrid_import_cstr = Constraint(self.model.periods, rule=offgrid_import_cstr)

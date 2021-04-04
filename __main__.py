@@ -6,15 +6,14 @@ from representative_days import RepresentativeDays, create_rd_output_path
 from sizing_configuration import SizingConfiguration
 
 rd = RepresentativeDays()
-simple_sizing = False
+simple_sizing = True
 
 if simple_sizing:
     with open("data/ANBRIMEX2/hs_AMBRIMEX.json", 'r') as file:
         microgrid = json.load(file)
     config = SizingConfiguration(microgrid["parameters"])
     case_name = config.case_name
-    initial_state = {"state_of_charge": {storage["name"]: 0.2 for storage in microgrid["storages"]}}
-    # initial_state = {"state_of_charge": {storage["name"]: 50 for storage in microgrid["storages"]}}
+    initial_state = {"state_of_charge": {storage["name"]: 50 for storage in microgrid["storages"]}}
     time_series = pd.read_csv("data/ANBRIMEX2/hs_0_data_15min_ANBRIMEX.csv", parse_dates=True, index_col='DateTime')
     rd_output_path = create_rd_output_path("results/" + case_name)
     selected_days, extracted_series, extracted_weights = rd.get_representative_days(time_series, config,
@@ -38,7 +37,7 @@ else:
     keys = ["name", "location", "longitude", "latitude", "peak_load", "avg_peak_winter",
             "avg_peak_spring", "avg_peak_summer", "avg_peak_autumn", "avg_base_winter",
             "avg_base_spring", "avg_base_summer", "avg_base_autumn", "purchase_price",
-            "off-grid", "PV", "BAT", "RBAT", "INV", "GEN", "NPV"]
+            "off-grid", "PV", "BAT", "RBAT", "RBATHORIZON" "INV", "GEN", "NPV"]
     db_ml = {k: [] for k in keys}
     for c in companies:
         config.case_name = c
@@ -143,6 +142,7 @@ else:
             else:
                 db_ml["GEN"].append(sizer.op_sizing["GEN"][0])
             db_ml["RBAT"].append(sizer.op_sizing["BATRVST"])
+            db_ml["RBATHORIZON"].append(sizer.op_sizing["BATRVSTHORIZON"])
             db_ml["NPV"].append(sizer.op_sizing["NPV"])
 
             # size with grid tied and grid connection cost modes
