@@ -21,35 +21,35 @@ class Sizer:
                                                                                                     extracted_series,
                                                                                                     extracted_weights)
             # Check if NRD are enough --> compute reliability indicator
-            grid = self.microgrid.copy()
-            sc = deepcopy(self.sizing_config)
-            grid['parameters']['multi_stage_sizing'] = False
-            sc.multi_stage_sizing = False
-            optimizer_check_nrd = PureOptimizer(grid, selected_days, extracted_series,
-                                           extracted_weights, sc, self.time_series, use_365_days=False)
-            optimizer_check_nrd.optimize_function()
-            op_sizing_check_nrd = optimizer_check_nrd.optimal_sizing
-
-            NPV_n_s = op_sizing_check_nrd['NPV']
-
-            simu_optimizer_nrd = SimulatorOptimizer(grid, selected_days, extracted_series, extracted_weights,
-                                                    sc, self.time_series, op_sizing_check_nrd,
-                                                    use_365_days=True)
-            simu_optimizer_nrd.optimize_function()
-            NPV_365_s = simu_optimizer_nrd.optimal_sizing['NPV']
-
-
-            optimizer_check_nrd = PureOptimizer(grid, selected_days, extracted_series,
-                                           extracted_weights, sc, self.time_series, use_365_days=True)
-            optimizer_check_nrd.optimize_function()
-            op_sizing_check_nrd = optimizer_check_nrd.optimal_sizing
-
-            NPV_365_s_star = op_sizing_check_nrd['NPV']
-
-            reliability_nrd = 1
-            reliability_nrd -= abs(NPV_n_s - NPV_365_s)/NPV_365_s
-            reliability_nrd -= abs(NPV_365_s - NPV_365_s_star)/NPV_365_s_star
-            print("Reliability indicator NRD = %s", reliability_nrd)
+            # grid = self.microgrid.copy()
+            # sc = deepcopy(self.sizing_config)
+            # grid['parameters']['multi_stage_sizing'] = False
+            # sc.multi_stage_sizing = False
+            # optimizer_check_nrd = PureOptimizer(grid, selected_days, extracted_series,
+            #                                extracted_weights, sc, self.time_series, use_365_days=False)
+            # optimizer_check_nrd.optimize_function()
+            # op_sizing_check_nrd = optimizer_check_nrd.optimal_sizing
+            #
+            # NPV_n_s = op_sizing_check_nrd['NPV']
+            #
+            # simu_optimizer_nrd = SimulatorOptimizer(grid, selected_days, extracted_series, extracted_weights,
+            #                                         sc, self.time_series, op_sizing_check_nrd,
+            #                                         use_365_days=True)
+            # simu_optimizer_nrd.optimize_function()
+            # NPV_365_s = simu_optimizer_nrd.optimal_sizing['NPV']
+            #
+            #
+            # optimizer_check_nrd = PureOptimizer(grid, selected_days, extracted_series,
+            #                                extracted_weights, sc, self.time_series, use_365_days=True)
+            # optimizer_check_nrd.optimize_function()
+            # op_sizing_check_nrd = optimizer_check_nrd.optimal_sizing
+            #
+            # NPV_365_s_star = op_sizing_check_nrd['NPV']
+            #
+            # reliability_nrd = 1
+            # reliability_nrd -= abs(NPV_n_s - NPV_365_s)/NPV_365_s
+            # reliability_nrd -= abs(NPV_365_s - NPV_365_s_star)/NPV_365_s_star
+            # print("Reliability indicator NRD = %.3f"%reliability_nrd)
 
 
         else:

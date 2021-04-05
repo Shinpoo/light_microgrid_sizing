@@ -947,7 +947,7 @@ class PureOptimizer:
         # plt.ylabel('Power [kW]')
         # plt.grid()
         # plt.legend()
-
+        #
         # plt.figure()
         # plt.plot(x, h2_energy, color="tab:blue", linewidth=2, label="H2 stored energy")
         # plt.xlabel('Hours')
@@ -960,7 +960,7 @@ class PureOptimizer:
         # plt.ylabel('Power [kW]')
         # plt.grid()
         # plt.legend()
-        plt.show()
+        # plt.show()
 
         # sys.exit("STOP")
 

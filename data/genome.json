@@ -6,7 +6,7 @@
     "optimizer_method": "optimization",
     "simulation_step": 60.0,
     "discount_rate": 0.02,
-    "num_representative_days": 10,
+    "num_representative_days": 12,
     "representative_days_time_limit": 20,
     "representative_days_solver": "gurobi",
     "grid_tied": true,
