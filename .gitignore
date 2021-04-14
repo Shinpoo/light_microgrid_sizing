@@ -8,3 +8,4 @@ results/
 *.h5
 nn_model/
 *.ipynb_checkpoints
+!*/results/mg_sizing_dataset_genome_1week_with_loc_with_metadata.csv
